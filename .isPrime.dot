@@ -1,0 +1,21 @@
+digraph "CFG for 'isPrime' function" {
+	label="CFG for 'isPrime' function";
+
+	Node0x55b3f5bb2ed0 [shape=record,color="#3d50c3ff", style=filled, fillcolor="#d0473d70", fontname="Courier",label="{1:\l|  %2 = alloca i32, align 4\l  %3 = alloca i32, align 4\l  %4 = alloca i32, align 4\l  store i32 %0, ptr %3, align 4\l  store i32 2, ptr %4, align 4\l  br label %5\l}"];
+	Node0x55b3f5bb2ed0 -> Node0x55b3f5bb2fc0;
+	Node0x55b3f5bb2fc0 [shape=record,color="#b70d28ff", style=filled, fillcolor="#b70d2870", fontname="Courier",label="{5:\l|  %6 = load i32, ptr %4, align 4\l  %7 = load i32, ptr %3, align 4\l  %8 = sdiv i32 %7, 2\l  %9 = icmp slt i32 %6, %8\l  br i1 %9, label %10, label %20\l|{<s0>T|<s1>F}}"];
+	Node0x55b3f5bb2fc0:s0 -> Node0x55b3f5bb5860;
+	Node0x55b3f5bb2fc0:s1 -> Node0x55b3f5bb58c0;
+	Node0x55b3f5bb5860 [shape=record,color="#b70d28ff", style=filled, fillcolor="#b70d2870", fontname="Courier",label="{10:\l|  %11 = load i32, ptr %3, align 4\l  %12 = load i32, ptr %4, align 4\l  %13 = srem i32 %11, %12\l  %14 = icmp eq i32 %13, 0\l  br i1 %14, label %15, label %16\l|{<s0>T|<s1>F}}"];
+	Node0x55b3f5bb5860:s0 -> Node0x55b3f5bb5f50;
+	Node0x55b3f5bb5860:s1 -> Node0x55b3f5bb5fb0;
+	Node0x55b3f5bb5f50 [shape=record,color="#3d50c3ff", style=filled, fillcolor="#d6524470", fontname="Courier",label="{15:\l|  store i32 0, ptr %2, align 4\l  br label %21\l}"];
+	Node0x55b3f5bb5f50 -> Node0x55b3f5bb61a0;
+	Node0x55b3f5bb5fb0 [shape=record,color="#b70d28ff", style=filled, fillcolor="#b70d2870", fontname="Courier",label="{16:\l|  br label %17\l}"];
+	Node0x55b3f5bb5fb0 -> Node0x55b3f5bb6270;
+	Node0x55b3f5bb6270 [shape=record,color="#b70d28ff", style=filled, fillcolor="#b70d2870", fontname="Courier",label="{17:\l|  %18 = load i32, ptr %4, align 4\l  %19 = add nsw i32 %18, 1\l  store i32 %19, ptr %4, align 4\l  br label %5, !llvm.loop !6\l}"];
+	Node0x55b3f5bb6270 -> Node0x55b3f5bb2fc0;
+	Node0x55b3f5bb58c0 [shape=record,color="#3d50c3ff", style=filled, fillcolor="#d6524470", fontname="Courier",label="{20:\l|  store i32 1, ptr %2, align 4\l  br label %21\l}"];
+	Node0x55b3f5bb58c0 -> Node0x55b3f5bb61a0;
+	Node0x55b3f5bb61a0 [shape=record,color="#3d50c3ff", style=filled, fillcolor="#d0473d70", fontname="Courier",label="{21:\l|  %22 = load i32, ptr %2, align 4\l  ret i32 %22\l}"];
+}
