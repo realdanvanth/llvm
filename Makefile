@@ -4,7 +4,7 @@ LDFLAGS = $(shell llvm-config --ldflags)
 LIBS = $(shell llvm-config --libs core irreader --system-libs)
 
 TARGET = output
-SRC = main.cpp
+SRC = practice.cpp
 
 all: $(TARGET)
 

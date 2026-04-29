@@ -12,9 +12,9 @@ int main(int argc, char **argv) {
   LLVMContext context;
   SMDiagnostic error;
   auto module = parseIRFile(argv[1], error, context);
-  auto *func = module->getFunction("isPrime");
+  auto func = module->getFunction("isPrime");
   errs() << "function name  " << func->getName() << "\n";
-  for (auto b = func->begin(); b != func->end(); ++b) {
+  for (auto b = func->begin(), e = func->end(); b != e; b++) {
     errs() << "BasicBlock: " << b->getName() << "\n";
     errs() << "Size:" << b->size() << "\n";
     for (auto i = b->begin(); i != b->end(); ++i) {
