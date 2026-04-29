@@ -1,7 +1,5 @@
-int fact(int n) {
-  if (n == 1)
-    return 1;
-  else
-    return n * fact(n - 1);
-}
-int main() { return fact(2); }
+int leaf(int x) { return x * 2; }
+int left(int x) { return leaf(x + 1); }
+int right(int x) { return leaf(x - 1); }
+int root(int x) { return left(x) + right(x); }
+int main() { return root(5); }

@@ -4,37 +4,51 @@ target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:
 target triple = "x86_64-pc-linux-gnu"
 
 ; Function Attrs: noinline nounwind optnone sspstrong uwtable
-define dso_local i32 @fact(i32 noundef %0) #0 {
+define dso_local i32 @leaf(i32 noundef %0) #0 {
   %2 = alloca i32, align 4
-  %3 = alloca i32, align 4
-  store i32 %0, ptr %3, align 4
-  %4 = load i32, ptr %3, align 4
-  %5 = icmp eq i32 %4, 1
-  br i1 %5, label %6, label %7
+  store i32 %0, ptr %2, align 4
+  %3 = load i32, ptr %2, align 4
+  %4 = mul nsw i32 %3, 2
+  ret i32 %4
+}
 
-6:                                                ; preds = %1
-  store i32 1, ptr %2, align 4
-  br label %13
+; Function Attrs: noinline nounwind optnone sspstrong uwtable
+define dso_local i32 @left(i32 noundef %0) #0 {
+  %2 = alloca i32, align 4
+  store i32 %0, ptr %2, align 4
+  %3 = load i32, ptr %2, align 4
+  %4 = add nsw i32 %3, 1
+  %5 = call i32 @leaf(i32 noundef %4)
+  ret i32 %5
+}
 
-7:                                                ; preds = %1
-  %8 = load i32, ptr %3, align 4
-  %9 = load i32, ptr %3, align 4
-  %10 = sub nsw i32 %9, 1
-  %11 = call i32 @fact(i32 noundef %10)
-  %12 = mul nsw i32 %8, %11
-  store i32 %12, ptr %2, align 4
-  br label %13
+; Function Attrs: noinline nounwind optnone sspstrong uwtable
+define dso_local i32 @right(i32 noundef %0) #0 {
+  %2 = alloca i32, align 4
+  store i32 %0, ptr %2, align 4
+  %3 = load i32, ptr %2, align 4
+  %4 = sub nsw i32 %3, 1
+  %5 = call i32 @leaf(i32 noundef %4)
+  ret i32 %5
+}
 
-13:                                               ; preds = %7, %6
-  %14 = load i32, ptr %2, align 4
-  ret i32 %14
+; Function Attrs: noinline nounwind optnone sspstrong uwtable
+define dso_local i32 @root(i32 noundef %0) #0 {
+  %2 = alloca i32, align 4
+  store i32 %0, ptr %2, align 4
+  %3 = load i32, ptr %2, align 4
+  %4 = call i32 @left(i32 noundef %3)
+  %5 = load i32, ptr %2, align 4
+  %6 = call i32 @right(i32 noundef %5)
+  %7 = add nsw i32 %4, %6
+  ret i32 %7
 }
 
 ; Function Attrs: noinline nounwind optnone sspstrong uwtable
 define dso_local i32 @main() #0 {
   %1 = alloca i32, align 4
   store i32 0, ptr %1, align 4
-  %2 = call i32 @fact(i32 noundef 2)
+  %2 = call i32 @root(i32 noundef 5)
   ret i32 %2
 }
 
