@@ -1,5 +1,12 @@
-int leaf(int x) { return x * 2; }
-int left(int x) { return leaf(x + 1); }
-int right(int x) { return leaf(x - 1); }
-int root(int x) { return left(x) + right(x); }
-int main() { return root(5); }
+int div(int a, int b) { return a / b; }
+int isPrime(int n) {
+  for (int i = 2; i < div(i, 2); i++) {
+    if (n % i == 0)
+      return 0;
+  }
+  return 1;
+}
+int main() {
+  isPrime(2);
+  return isPrime(3);
+}

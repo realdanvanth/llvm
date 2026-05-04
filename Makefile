@@ -1,10 +1,10 @@
-CXX = clang++
+CX = clang++
 CXXFLAGS = $(shell llvm-config --cxxflags) -fno-rtti -std=c++20
 LDFLAGS = $(shell llvm-config --ldflags)
 LIBS = $(shell llvm-config --libs core irreader --system-libs)
 
 TARGET = output
-SRC = callgraph.cpp
+SRC = deadcode.cpp
 
 all: $(TARGET)
 

@@ -10,6 +10,14 @@
 #include <vector>
 using namespace llvm;
 using namespace std;
+vector<StringRef> livecode;
+void addlivecode(StringRef func) {
+  for (auto i = 0; i < livecode.size(); i++) {
+    if (livecode[i] == func)
+      return;
+  }
+  livecode.push_back(func);
+}
 bool check(vector<StringRef> functions, StringRef func) {
   for (auto i = 0; i < functions.size(); i++) {
     if (functions[i] == func) {
@@ -20,7 +28,8 @@ bool check(vector<StringRef> functions, StringRef func) {
   // errs()<<"true\n";
   return true;
 }
-void callgraph(Function *func, vector<StringRef> functions,string indentation) {
+void callgraph(Function *func, vector<StringRef> functions,
+               string indentation) {
   functions.push_back(func->getName());
   for (auto BB = func->begin(), eBB = func->end(); BB != eBB; BB++) {
     // errs()<<"basic block:\n";
@@ -30,10 +39,12 @@ void callgraph(Function *func, vector<StringRef> functions,string indentation) {
         auto calledf = call->getCalledFunction();
         // errs()<<calledf->getName()<<"\n";
         if (check(functions, calledf->getName())) {
-          errs()<<indentation<< func->getName() << "-->" << calledf->getName()<<"\n";
+          errs() << indentation << func->getName() << "-->"
+                 << calledf->getName() << "\n";
           vector<StringRef> cycle = functions;
           cycle.push_back(calledf->getName());
-          callgraph(calledf, cycle,indentation+"   ");
+          addlivecode(calledf->getName());
+          callgraph(calledf, cycle, indentation + "   ");
 
         } else {
           errs() << "\n";
@@ -45,7 +56,13 @@ void callgraph(Function *func, vector<StringRef> functions,string indentation) {
 int main(int argc, char **argv) {
   LLVMContext context;
   SMDiagnostic error;
+  livecode.push_back("main");
   auto module = parseIRFile(argv[1], error, context);
   vector<StringRef> hello;
-  callgraph(module->getFunction("main"), hello,"");
+  callgraph(module->getFunction("main"), hello, "");
+  for (auto f = module->begin(), e = module->end(); f != e; f++) {
+    if (check(livecode, f->getName())) {
+      errs() << "dead code found : \n" << f->getName() << "\n";
+    }
+  }
 }
