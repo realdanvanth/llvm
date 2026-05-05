@@ -1,6 +1,12 @@
-to run :
-#build
-./run.sh <directory-name>
-#execute
-./pass <file>.so <pass-name> <file>.ll
+# build pass
+
+./run.sh <dir>
+
+# run pass
+
+./pass.sh <plugin.so> <pass> <input.ll>
+
+# create new pass
+
+./newpass.sh
 
