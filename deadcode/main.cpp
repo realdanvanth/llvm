@@ -64,6 +64,20 @@ struct DeadCode : public PassInfoMixin<DeadCode> {
         M->eraseFromParent();
         M = next;
       } else {
+        for (auto BB = M->begin(), eBB = M->end(); BB != eBB; BB++) {
+          for (auto Inst = BB->begin(), eInst = BB->end(); Inst != eInst;) {
+            if (auto r = dyn_cast<ReturnInst>(Inst)) {
+              BB = std::next(BB);
+              while (BB != eBB) {
+                auto next = std::next(BB);
+                BB->eraseFromParent();
+                BB = next;
+              }
+            } else {
+              Inst++;
+            }
+          }
+        }
         M++;
       }
     }

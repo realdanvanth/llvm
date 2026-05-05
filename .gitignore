@@ -1,3 +1,26 @@
-*.so
 build/
+*/build/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+*.o
+*.o.d
+*.a
+*.so
+*.out
+a.out
+*.dylib
+*.bc
+output.ll
+*.log
+*.tmp
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
 
