@@ -1,4 +1,5 @@
-#include "string.h"
+#
+nclude "string.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Plugins/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
@@ -6,7 +7,7 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/InstrTypes.h>
 #include <string>
-using namespace llvm;
+    using namespace llvm;
 namespace {
 struct LVN : PassInfoMixin<LVN> {
   std::string getInfo(Value *inst) {
@@ -16,6 +17,7 @@ struct LVN : PassInfoMixin<LVN> {
     std::string s;
     raw_string_ostream rso(s);
     inst->printAsOperand(rso, false);
+    int n = inst->getNameOrAsOperand();
     return rso.str();
   }
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &) {

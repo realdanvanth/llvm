@@ -18,7 +18,7 @@ set(CMAKE_CXX_STANDARD 17 CACHE STRING "")
 if(NOT LLVM_ENABLE_RTTI)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
 endif()
-add_library(LVN SHARED main.cpp)
+add_library(LVN SHARED constantprop.cpp)
 # Link against LLVM libraries
 target_link_libraries(LVN ${llvm_libs})
 set_target_properties(LVN PROPERTIES
