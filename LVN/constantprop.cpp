@@ -61,6 +61,14 @@ struct LVN : PassInfoMixin<LVN> {
           errs() << op->getNameOrAsOperand() << " : load address"
                  << "\n"; // this is the load address
           errs() << op->getOperand(0)->getNameOrAsOperand() << "the pointer \n";
+          // if pointer address is there in the constantmap then we good....
+          auto item = constantmap.find(op->getOperand(0)->getNameOrAsOperand());
+          if (item != constantmap.end()) {
+	    errs()<<"hello\n";
+            constantmap.insert(
+                {op->getNameOrAsOperand(), item->second});
+	    errs()<<"hellolil voooo\n";
+          }
         }
       }
     }
