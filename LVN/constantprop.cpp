@@ -27,11 +27,15 @@ struct LVN : PassInfoMixin<LVN> {
     errs() << "running constant propogtion pass\n";
     for (auto BB = F.begin(), eBB = F.end(); BB != eBB; BB++) {
       std::unordered_map<std::basic_string<char>, int> constantmap;
-      for (auto inst = BB->begin(), eInst = BB->end(); inst != eInst; inst++) {
+      llvm::DenseMap<std::tuple<unsigned, Value *, Value *>, Value *> map;
+      bool del = false;
+      for (auto inst = BB->begin(), eInst = BB->end(); inst != eInst;) {
+        bool del = false;
         if (auto op = dyn_cast<BinaryOperator>(inst)) {
           int l = getValue(op->getOperand(0), constantmap);
           int r = getValue(op->getOperand(1), constantmap);
-          if (l != 0 && r != 0) {
+          if (l != 0 &&
+              r != 0) { // both are constants so we can do constant propogation
             int result = 0;
             if (op->getOpcode() == Instruction::Add) {
               result = l + r;
@@ -46,10 +50,26 @@ struct LVN : PassInfoMixin<LVN> {
             }
             auto value = ConstantInt::get(op->getType(), result);
             op->replaceAllUsesWith(value);
-            auto next = std::next(inst);
-            errs() << "we replaced lol \n";
-            inst->eraseFromParent();
-            inst = next;
+            del = true;
+          } else { // common subexpression elimination
+            if (auto op = dyn_cast<BinaryOperator>(inst)) {
+              auto hashl = op->getOperand(0);
+              auto hashr = op->getOperand(1);
+              if (hashl > hashr && (op->getOpcode() == Instruction::Add ||
+                                    op->getOpcode() == Instruction::Mul)) {
+                std::swap(hashl, hashr);
+              }
+              auto expr =
+                  map.find(std::make_tuple(op->getOpcode(), hashl, hashr));
+              if (expr != map.end()) {
+                errs() << "expression found tp be replaced...........\n";
+                op->replaceAllUsesWith(expr->second);
+                del = true;
+              } else {
+		errs()<<"inserted expression\n";
+                map[std::make_tuple(op->getOpcode(), hashl, hashr)] = &*inst;
+              }
+            }
           }
         } else if (auto op = dyn_cast<StoreInst>(inst)) {
           if (auto val = dyn_cast<ConstantInt>(op->getOperand(0))) {
@@ -58,17 +78,25 @@ struct LVN : PassInfoMixin<LVN> {
             errs() << "inserted\n";
           }
         } else if (auto op = dyn_cast<LoadInst>(inst)) {
-          errs() << op->getNameOrAsOperand() << " : load address"
-                 << "\n"; // this is the load address
-          errs() << op->getOperand(0)->getNameOrAsOperand() << "the pointer \n";
-          // if pointer address is there in the constantmap then we good....
+          // errs() << op->getNameOrAsOperand() << " : load address"
+          //      << "\n"; // this is the load address
+          // errs() << op->getOperand(0)->getNameOrAsOperand() << "the pointer
+          // \n";
+          //  if pointer address is there in the constantmap then we good....
           auto item = constantmap.find(op->getOperand(0)->getNameOrAsOperand());
           if (item != constantmap.end()) {
-	    errs()<<"hello\n";
-            constantmap.insert(
-                {op->getNameOrAsOperand(), item->second});
-	    errs()<<"hellolil voooo\n";
+            errs() << "hello\n";
+            constantmap.insert({op->getNameOrAsOperand(), item->second});
+            errs() << "hellolil voooo\n";
           }
+        }
+        if (del) {
+          auto next = std::next(inst);
+          errs() << "we replaced lol \n";
+          inst->eraseFromParent();
+          inst = next;
+        } else {
+          inst++;
         }
       }
     }

@@ -47,7 +47,6 @@ struct LVN : PassInfoMixin<LVN> {
             errs() << "Replaced........\n\n";
             inst->replaceAllUsesWith(expr->second);
             inst->eraseFromParent();
-
           } else {
             errs() << hash << "   new one vro\n";
             map[hash] = &*inst;
