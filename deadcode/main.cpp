@@ -3,7 +3,10 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Plugins/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
+#include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
+#include <llvm/IR/Value.h>
+#include <llvm/Support/Casting.h>
 using namespace llvm;
 using namespace std;
 struct DeadCode : public PassInfoMixin<DeadCode> {
@@ -25,8 +28,10 @@ struct DeadCode : public PassInfoMixin<DeadCode> {
     // errs()<<"true\n";
     return true;
   }
-  void callgraph(Function *func, vector<StringRef> functions,
-                 string indentation) {
+  void callgraph(
+      Function *func,
+      vector<StringRef> functions, // this must be called first before anything
+      string indentation) {
     functions.push_back(func->getName());
     for (auto BB = func->begin(), eBB = func->end(); BB != eBB; BB++) {
       // errs()<<"basic block:\n";
@@ -50,6 +55,33 @@ struct DeadCode : public PassInfoMixin<DeadCode> {
       }
     }
   }
+  // so now we will be eliminating dead loads, loads that are not used anywhere this ,ust come after everything is done
+   void eliminateDeadLoads(Function *F) {
+    // llvm::DenseMap<std::string, LoadInst *> map;
+    for (auto BB = F->begin(), eBB = F->end(); BB != eBB; BB++) {
+      for (auto inst = BB->begin(), einst = BB->end(); inst != einst;) {
+        bool del = false;
+        if (auto op = dyn_cast<LoadInst>(inst)) {
+          if (!op->isUsedInBasicBlock(&*BB)) {
+            del = true;
+          }
+        } else if (auto op = dyn_cast<StoreInst>(inst)) {
+          errs() << *inst << " " << op->isUsedInBasicBlock(&*BB) << "\n";
+          /*if (!op->isUsedInBasicBlock(&*BB)) {
+            del = true;
+          }*/
+        }
+        if (del) {
+          auto next = std::next(inst);
+          inst->eraseFromParent();
+          inst = next;
+        } else {
+          inst++;
+        }
+      }
+    }
+  }
+
 
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &) {
     Function *F = M.getFunction("main");
