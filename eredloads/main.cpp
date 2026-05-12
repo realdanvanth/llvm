@@ -13,24 +13,24 @@ struct HelloWorld : PassInfoMixin<HelloWorld> {
     for (auto inst = BB->begin(), einst = BB->end(); inst != einst;) {
       bool del = false;
       if (auto op = dyn_cast<LoadInst>(inst)) {
-        //errs() << " load address : " << op->getPointerOperand() << "\n";
-	auto item = map.find(op->getPointerOperand());
-	if(item!=map.end()){//this is an redundant load
-		del = true;
-		errs()<<"erased : "<<*inst<<" replaced with : "<<*item->second<<"\n";
-		op->replaceAllUsesWith(item->second);
-	}
-	else{ // now this is a new load we add it to the map
-		map[op->getPointerOperand()] = op;
-	}
-      }
-      else if(auto op = dyn_cast<StoreInst>(inst)){	
-	//errs() << "store inst gng : "<<op->getPointerOperand()<<"\n";
-	auto item = map.find(op->getPointerOperand());
-	if(item!=map.end())// now if a store is found , the value is changed and cant be reused
-	{
-		map.erase(item);
-	}
+        // errs() << " load address : " << op->getPointerOperand() << "\n";
+        auto item = map.find(op->getPointerOperand());
+        if (item != map.end()) { // this is an redundant load
+          del = true;
+          errs() << "erased : " << *inst << " replaced with : " << *item->second
+                 << "\n";
+          op->replaceAllUsesWith(item->second);
+        } else { // now this is a new load we add it to the map
+          map[op->getPointerOperand()] = op;
+        }
+      } else if (auto op = dyn_cast<StoreInst>(inst)) {
+        // errs() << "store inst gng : "<<op->getPointerOperand()<<"\n";
+        auto item = map.find(op->getPointerOperand());
+        if (item != map.end()) // now if a store is found , the value is changed
+                               // and cant be reused
+        {
+          map.erase(item);
+        }
       }
       if (del) {
         auto next = std::next(inst);
