@@ -1,7 +1,9 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Plugins/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
+#include <llvm/ADT/DenseMap.h>
 #include <llvm/ADT/StringMapEntry.h>
+#include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/InstrTypes.h>
 #include <llvm/IR/Instructions.h>
@@ -22,6 +24,11 @@ struct LVN : PassInfoMixin<LVN> {
     }
 
     return 0;
+  }
+  void eliminateRedundantLoads(BasicBlock BB) {
+    llvm::DenseMap<typename KeyT, typename ValueT> for (auto inst = BB->begin(),
+                                                        e = BB->end();
+                                                        inst != e) {}
   }
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &) {
     errs() << "running constant propogtion pass\n";
@@ -66,7 +73,9 @@ struct LVN : PassInfoMixin<LVN> {
                 op->replaceAllUsesWith(expr->second);
                 del = true;
               } else {
-		errs()<<"inserted expression\n";
+                errs() << "inserted expression "
+                       << op->getOperand(0)->getNameOrAsOperand() << "  "
+                       << op->getOperand(1)->getNameOrAsOperand() << "\n";
                 map[std::make_tuple(op->getOpcode(), hashl, hashr)] = &*inst;
               }
             }
@@ -76,6 +85,7 @@ struct LVN : PassInfoMixin<LVN> {
             constantmap.insert(
                 {op->getOperand(1)->getNameOrAsOperand(), val->getSExtValue()});
             errs() << "inserted\n";
+          } else { // have to check if the value is changed so we cant do things
           }
         } else if (auto op = dyn_cast<LoadInst>(inst)) {
           // errs() << op->getNameOrAsOperand() << " : load address"

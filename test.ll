@@ -13,6 +13,8 @@ define dso_local i32 @test_commute(i32 noundef %0, i32 noundef %1) #0 {
   store i32 %1, ptr %4, align 4
   %7 = load i32, ptr %3, align 4
   %8 = load i32, ptr %4, align 4
+  ; now if a store comes that uses any key in the hashmap we quit gng , 
+  ; delete the entry
   %9 = add nsw i32 %7, %8
   store i32 %9, ptr %5, align 4
   %10 = load i32, ptr %3, align 4
