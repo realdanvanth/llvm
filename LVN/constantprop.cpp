@@ -6,9 +6,11 @@
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/InstrTypes.h>
+#include <llvm/IR/Instruction.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/Support/Casting.h>
 #include <string>
+#include <unordered_map>
 using namespace llvm;
 namespace {
 struct LVN : PassInfoMixin<LVN> {
@@ -65,15 +67,16 @@ struct LVN : PassInfoMixin<LVN> {
       for (auto inst = BB->begin(), einst = BB->end(); inst != einst;) {
         bool del = false;
         if (auto op = dyn_cast<LoadInst>(inst)) {
-          if (!op->isUsedInBasicBlock(&*BB)) {
+          if (!op->isUsedInBasicBlock(&*BB) &&
+              !op->isUsedOutsideOfBlock(&*BB)) {
             del = true;
           }
-        } else if (auto op = dyn_cast<StoreInst>(inst)) {
-          errs() << *inst << " " << op->isUsedInBasicBlock(&*BB) << "\n";
-          /*if (!op->isUsedInBasicBlock(&*BB)) {
-            del = true;
-          }*/
-        }
+        } /* else if (auto op = dyn_cast<StoreInst>(inst)) {
+           errs() << *inst << " " << op->isUsedInBasicBlock(&*BB) << "\n";
+           if (op->getPointerOperand()->use_empty()) {
+             del = true;
+           }
+         }*/
         if (del) {
           auto next = std::next(inst);
           inst->eraseFromParent();
@@ -84,6 +87,30 @@ struct LVN : PassInfoMixin<LVN> {
       }
     }
   }
+  void eliminateDeadStores(Function *F) {
+    for (auto BB = F->begin(), eBB = F->end(); BB != eBB; BB++) {
+	std::unordered_map<Value *, Instruction *> map ;
+      for (auto inst = BB->begin(), einst = BB->end(); inst != einst;inst++) {
+	 if (auto op = dyn_cast<StoreInst>(inst)) {
+           errs()<<op->getPointerOperand()<<"  "<<*inst<<"  "<<op->getOperand(1)->getNameOrAsOperand()<<"\n";
+	   map.insert({op->getOperand(1),&*inst}); 
+         }
+	if (auto op = dyn_cast<LoadInst>(inst)) {
+	   errs()<<op->getOperand(0)->getNameOrAsOperand()<<"  "<<*inst<<"\n";
+	   map.erase(op->getOperand(0));
+         }
+       //bool del = false; 
+      }
+      for(auto deadstore = map.begin(),e=map.end();deadstore!=e;){
+	auto next = std::next(deadstore);
+        // errs() << "we replaced lol \n";
+        deadstore->second->eraseFromParent();
+        deadstore = next;
+
+	}
+
+    }
+}
   void constantPropogation(BasicBlock *BB) {
     std::unordered_map<std::basic_string<char>, int> constantmap;
     for (auto inst = BB->begin(), eInst = BB->end(); inst != eInst;) {
@@ -192,6 +219,7 @@ struct LVN : PassInfoMixin<LVN> {
       }
     }
     eliminateDeadLoads(&F);
+    eliminateDeadStores(&F);
     return PreservedAnalyses::all();
   }
 };
