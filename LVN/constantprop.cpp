@@ -1,3 +1,8 @@
+// so our pipeline is to first eliminate redundant loads , in order for CSE to happen
+// after doing that we implement constant folding and propogation 
+// constant propogation produces dead loads and stores 
+// after constant propogation we perform common subexpression elimination through lvn 
+// after all this we eliminate dead loads , dead stores , dead allocs
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Plugins/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
@@ -29,6 +34,7 @@ struct LVN : PassInfoMixin<LVN> {
   }
   void eliminateRedLoads(
       BasicBlock *BB) { // this is required for common subexpression elimination
+		// also we only assume store changes the value , a function call can do it too
     std::unordered_map<Value *, Value *> map;
     for (auto inst = BB->begin(), einst = BB->end(); inst != einst;) {
       bool del = false;
@@ -61,8 +67,12 @@ struct LVN : PassInfoMixin<LVN> {
       }
     }
   }
+   // TO DO : after constant prop/ LVN , we need to check if the loads and stores
+  // are actually used anywhere else this must be done after everything is
+  // finished
   void eliminateDeadLoads(Function *F) {
     // llvm::DenseMap<std::string, LoadInst *> map;
+    // we probably dont have any problems with this 
     for (auto BB = F->begin(), eBB = F->end(); BB != eBB; BB++) {
       for (auto inst = BB->begin(), einst = BB->end(); inst != einst;) {
         bool del = false;
@@ -87,7 +97,12 @@ struct LVN : PassInfoMixin<LVN> {
       }
     }
   }
+  // TO DO : eliminate redundant stores , like when two variables are the same
+  // thing , this must be implemented only after common
+  //  sub expression elimination
   void eliminateDeadStores(Function *F) {
+    //we may have problems with this if the load inst is used in the next basic block ???
+   // i should find that out
     for (auto BB = F->begin(), eBB = F->end(); BB != eBB; BB++) {
 	std::unordered_map<Value *, Instruction *> map ;
       for (auto inst = BB->begin(), einst = BB->end(); inst != einst;inst++) {
@@ -106,11 +121,12 @@ struct LVN : PassInfoMixin<LVN> {
         // errs() << "we replaced lol \n";
         deadstore->second->eraseFromParent();
         deadstore = next;
-
 	}
-
     }
 }
+//TO DO: after the stores are eliminated , we may have dead allocs , so those need to be
+// eliminated after that, we are good with it 
+
   void constantPropogation(BasicBlock *BB) {
     std::unordered_map<std::basic_string<char>, int> constantmap;
     for (auto inst = BB->begin(), eInst = BB->end(); inst != eInst;) {
@@ -168,13 +184,6 @@ struct LVN : PassInfoMixin<LVN> {
       }
     }
   }
-  // TO DO : eliminate redundant stores , like when two variables are the same
-  // thing , this must be implemented only after common
-  //  sub expression elimination
-
-  // TO DO : after constant prop/ LVN , we need to check if the loads and stores
-  // are actually used anywhere else this must be done after everything is
-  // finished
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &) {
     errs() << "running constant propogtion pass\n";
     for (auto BB = F.begin(), eBB = F.end(); BB != eBB; BB++) {
