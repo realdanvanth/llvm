@@ -1,8 +1,9 @@
-// so our pipeline is to first eliminate redundant loads , in order for CSE to happen
-// after doing that we implement constant folding and propogation 
-// constant propogation produces dead loads and stores 
-// after constant propogation we perform common subexpression elimination through lvn 
-// after all this we eliminate dead loads , dead stores , dead allocs
+// so our pipeline is to first eliminate redundant loads , in order for CSE to
+// happen after doing that we implement constant folding and propogation
+// constant propogation produces dead loads and stores
+// after constant propogation we perform common subexpression elimination
+// through lvn after all this we eliminate dead loads , dead stores , dead
+// allocs
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Plugins/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
@@ -34,7 +35,8 @@ struct LVN : PassInfoMixin<LVN> {
   }
   void eliminateRedLoads(
       BasicBlock *BB) { // this is required for common subexpression elimination
-		// also we only assume store changes the value , a function call can do it too
+    // also we only assume store changes the value , a function call can do it
+    // too
     std::unordered_map<Value *, Value *> map;
     for (auto inst = BB->begin(), einst = BB->end(); inst != einst;) {
       bool del = false;
@@ -67,12 +69,13 @@ struct LVN : PassInfoMixin<LVN> {
       }
     }
   }
-   // TO DO : after constant prop/ LVN , we need to check if the loads and stores
+  // TO DO : after constant prop/ LVN , we need to check if the loads and stores
   // are actually used anywhere else this must be done after everything is
   // finished
   void eliminateDeadLoads(Function *F) {
     // llvm::DenseMap<std::string, LoadInst *> map;
-    // we probably dont have any problems with this 
+    // we probably dont have any problems with this
+    // because we check both in and out of the basic block
     for (auto BB = F->begin(), eBB = F->end(); BB != eBB; BB++) {
       for (auto inst = BB->begin(), einst = BB->end(); inst != einst;) {
         bool del = false;
@@ -81,12 +84,7 @@ struct LVN : PassInfoMixin<LVN> {
               !op->isUsedOutsideOfBlock(&*BB)) {
             del = true;
           }
-        } /* else if (auto op = dyn_cast<StoreInst>(inst)) {
-           errs() << *inst << " " << op->isUsedInBasicBlock(&*BB) << "\n";
-           if (op->getPointerOperand()->use_empty()) {
-             del = true;
-           }
-         }*/
+        }
         if (del) {
           auto next = std::next(inst);
           inst->eraseFromParent();
@@ -101,31 +99,59 @@ struct LVN : PassInfoMixin<LVN> {
   // thing , this must be implemented only after common
   //  sub expression elimination
   void eliminateDeadStores(Function *F) {
-    //we may have problems with this if the load inst is used in the next basic block ???
-   // i should find that out
+    // we may have problems with this if the load inst is used in the next basic
+    // block ???
+    // i should find that out
+    // this breaks when there is load happening outside the basic block ,
+    // the store is still valid but there is deletion happening
+    std::unordered_map<Value *, Instruction *> map;
     for (auto BB = F->begin(), eBB = F->end(); BB != eBB; BB++) {
-	std::unordered_map<Value *, Instruction *> map ;
-      for (auto inst = BB->begin(), einst = BB->end(); inst != einst;inst++) {
-	 if (auto op = dyn_cast<StoreInst>(inst)) {
-           errs()<<op->getPointerOperand()<<"  "<<*inst<<"  "<<op->getOperand(1)->getNameOrAsOperand()<<"\n";
-	   map.insert({op->getOperand(1),&*inst}); 
-         }
-	if (auto op = dyn_cast<LoadInst>(inst)) {
-	   errs()<<op->getOperand(0)->getNameOrAsOperand()<<"  "<<*inst<<"\n";
-	   map.erase(op->getOperand(0));
-         }
-       //bool del = false; 
+      // std::unordered_map<Value *, Instruction *> map;
+      for (auto inst = BB->begin(), einst = BB->end(); inst != einst; inst++) {
+        if (auto op = dyn_cast<StoreInst>(inst)) {
+          // errs() << op->getPointerOperand() << "  " << *inst << "  "
+          //       << op->getOperand(1)->getNameOrAsOperand() << "\n";
+          map.insert({op->getOperand(1), &*inst});
+        }
+        if (auto op = dyn_cast<LoadInst>(inst)) {
+          // errs() << op->getOperand(0)->getNameOrAsOperand() << "  " << *inst
+          //       << "\n";
+          map.erase(op->getOperand(0));
+        }
+        // bool del = false;
       }
-      for(auto deadstore = map.begin(),e=map.end();deadstore!=e;){
-	auto next = std::next(deadstore);
-        // errs() << "we replaced lol \n";
-        deadstore->second->eraseFromParent();
-        deadstore = next;
-	}
     }
-}
-//TO DO: after the stores are eliminated , we may have dead allocs , so those need to be
-// eliminated after that, we are good with it 
+    for (auto deadstore = map.begin(), e = map.end(); deadstore != e;) {
+      auto next = std::next(deadstore);
+      // errs() << "we replaced lol \n";
+      deadstore->second->eraseFromParent();
+      deadstore = next;
+    }
+  }
+  void eliminateDeadAllocs(Function *F) {
+    // same as  store , we are only checking if its used inside the basic block
+    //  we may end up with errors if the alloc is happening outside and the
+    //  store inside the basic block
+    std::unordered_map<std::string, Instruction *> map;
+    for (auto BB = F->begin(), eBB = F->end(); BB != eBB; BB++) {
+      // std::unordered_map<std::string, Instruction *> map;
+      for (auto inst = BB->begin(), einst = BB->end(); inst != einst; inst++) {
+        if (auto op = dyn_cast<AllocaInst>(inst)) {
+          errs() << "  " << *inst << "  " << op->getName() << "\n";
+          std::string a = op->getNameOrAsOperand();
+          map.insert({a, &*inst});
+        }
+        if (auto op = dyn_cast<StoreInst>(inst)) {
+          map.erase(op->getOperand(1)->getNameOrAsOperand());
+        }
+      }
+    }
+    for (auto deadstore = map.begin(), e = map.end(); deadstore != e;) {
+      auto next = std::next(deadstore);
+      deadstore->second->eraseFromParent();
+      deadstore = next;
+    }
+  }
 
   void constantPropogation(BasicBlock *BB) {
     std::unordered_map<std::basic_string<char>, int> constantmap;
@@ -135,8 +161,7 @@ struct LVN : PassInfoMixin<LVN> {
       if (auto op = dyn_cast<BinaryOperator>(inst)) {
         int l = getValue(op->getOperand(0), constantmap);
         int r = getValue(op->getOperand(1), constantmap);
-        if (l != 0 &&
-            r != 0) { // both are constants so we can do constant propogation
+        if (l != 0 && r != 0) {
           int result = 0;
           if (op->getOpcode() == Instruction::Add) {
             result = l + r;
@@ -150,7 +175,6 @@ struct LVN : PassInfoMixin<LVN> {
             result = l % r;
           }
           auto value = ConstantInt::get(op->getType(), result);
-          errs() << "constant propogation is happening \n";
           op->replaceAllUsesWith(value);
           del = true;
         }
@@ -158,25 +182,20 @@ struct LVN : PassInfoMixin<LVN> {
         if (auto val = dyn_cast<ConstantInt>(op->getOperand(0))) {
           constantmap.insert(
               {op->getOperand(1)->getNameOrAsOperand(), val->getSExtValue()});
-          errs() << "inserted\n";
-        } else { // have to check if the value is changed so we cant do things
+          op->replaceAllUsesWith(
+              ConstantInt::get(op->getType(), val->getSExtValue()));
+          del = true;
         }
       } else if (auto op = dyn_cast<LoadInst>(inst)) {
-        // errs() << op->getNameOrAsOperand() << " : load address"
-        //      << "\n"; // this is the load address
-        // errs() << op->getOperand(0)->getNameOrAsOperand() << "the pointer
-        // \n";
-        //  if pointer address is there in the constantmap then we good....
         auto item = constantmap.find(op->getOperand(0)->getNameOrAsOperand());
         if (item != constantmap.end()) {
-          // errs() << "hello\n";
-          constantmap.insert({op->getNameOrAsOperand(), item->second});
-          // errs() << "hellolil voooo\n";
+          // constantmap.insert({op->getNameOrAsOperand(), item->second});
+          op->replaceAllUsesWith(ConstantInt::get(op->getType(), item->second));
+          del = true;
         }
       }
       if (del) {
         auto next = std::next(inst);
-        // errs() << "we replaced lol \n";
         inst->eraseFromParent();
         inst = next;
       } else {
@@ -185,15 +204,12 @@ struct LVN : PassInfoMixin<LVN> {
     }
   }
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &) {
-    errs() << "running constant propogtion pass\n";
     for (auto BB = F.begin(), eBB = F.end(); BB != eBB; BB++) {
       eliminateRedLoads(&*BB);
       constantPropogation(&*BB);
-      // std::unordered_map<std::basic_string<char>, int> constantmap;
       llvm::DenseMap<std::tuple<unsigned, Value *, Value *>, Value *> map;
       bool del = false;
       for (auto inst = BB->begin(), eInst = BB->end(); inst != eInst;) {
-        // eliminateRedLoads(&*inst);
         bool del = false;
         if (auto op = dyn_cast<BinaryOperator>(inst)) {
           auto hashl = op->getOperand(0);
@@ -204,22 +220,14 @@ struct LVN : PassInfoMixin<LVN> {
           }
           auto expr = map.find(std::make_tuple(op->getOpcode(), hashl, hashr));
           if (expr != map.end()) {
-            errs() << "expression found tp be replaced...........\n";
-            errs() << "erased : " << *inst
-                   << " replaced with : " << *expr->second << "\n";
-            // op->replaceAllUsesWith(item->second);
             op->replaceAllUsesWith(expr->second);
             del = true;
           } else {
-            errs() << "inserted expression "
-                   << op->getOperand(0)->getNameOrAsOperand() << "  "
-                   << op->getOperand(1)->getNameOrAsOperand() << "\n";
             map[std::make_tuple(op->getOpcode(), hashl, hashr)] = &*inst;
           }
         }
         if (del) {
           auto next = std::next(inst);
-          // errs() << "we replaced lol \n";
           inst->eraseFromParent();
           inst = next;
         } else {
@@ -227,8 +235,9 @@ struct LVN : PassInfoMixin<LVN> {
         }
       }
     }
-    eliminateDeadLoads(&F);
-    eliminateDeadStores(&F);
+    // eliminateDeadLoads(&F);
+    // eliminateDeadStores(&F);
+    eliminateDeadAllocs(&F);
     return PreservedAnalyses::all();
   }
 };
