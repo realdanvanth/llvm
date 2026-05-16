@@ -1,12 +1,7 @@
-// so our pipeline is to first eliminate redundant loads , in order for CSE to
-// happen after doing that we implement constant folding and propogation
-// constant propogation produces dead loads and stores
-// after constant propogation we perform common subexpression elimination
-// through lvn after all this we eliminate dead loads , dead stores , dead
-// allocs
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Plugins/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
+#include <iterator>
 #include <llvm/ADT/DenseMap.h>
 #include <llvm/ADT/StringMapEntry.h>
 #include <llvm/IR/BasicBlock.h>
@@ -15,13 +10,19 @@
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/Support/Casting.h>
+#include <optional>
 #include <string>
 #include <unordered_map>
+#define DEBUG_TYPE "lvn"
 using namespace llvm;
 namespace {
 struct LVN : PassInfoMixin<LVN> {
-  int getValue(Value *operand,
-               std::unordered_map<std::basic_string<char>, int> constantmap) {
+  std::optional<int>
+  getValue(Value *operand,
+           std::unordered_map<std::basic_string<char>, int> constantmap) {
+    // this is a simple method , given a value , it checks if its a constant
+    //  ie if the operands are constants or either if they were folded earlier
+    //  and now have a constant entry
     if (auto val = dyn_cast<ConstantInt>(operand)) {
       int n = val->getSExtValue();
       return n;
@@ -30,59 +31,39 @@ struct LVN : PassInfoMixin<LVN> {
     if (val != constantmap.end()) {
       return val->second;
     }
-
-    return 0;
+    return std::nullopt; // this is if the operand is found to be not a constant
   }
-  void eliminateRedLoads(
-      BasicBlock *BB) { // this is required for common subexpression elimination
-    // also we only assume store changes the value , a function call can do it
-    // too
-    std::unordered_map<Value *, Value *> map;
-    for (auto inst = BB->begin(), einst = BB->end(); inst != einst;) {
-      bool del = false;
-      if (auto op = dyn_cast<LoadInst>(inst)) {
-        // errs() << " load address : " << op->getPointerOperand() << "\n";
-        auto item = map.find(op->getPointerOperand());
-        if (item != map.end()) { // this is an redundant load
-          del = true;
-          errs() << "erased : " << *inst << " replaced with : " << *item->second
-                 << "\n";
-          op->replaceAllUsesWith(item->second);
-        } else { // now this is a new load we add it to the map
-          map[op->getPointerOperand()] = op;
-        }
-      } else if (auto op = dyn_cast<StoreInst>(inst)) {
-        // errs() << "store inst gng : "<<op->getPointerOperand()<<"\n";
-        auto item = map.find(op->getPointerOperand());
-        if (item != map.end()) // now if a store is found , the value is changed
-                               // and cant be reused
-        {
-          map.erase(item);
-        }
-      }
-      if (del) {
-        auto next = std::next(inst);
-        inst->eraseFromParent();
-        inst = next;
-      } else {
-        inst++;
-      }
-    }
-  }
-  // TO DO : after constant prop/ LVN , we need to check if the loads and stores
-  // are actually used anywhere else this must be done after everything is
-  // finished
-  void eliminateDeadLoads(Function *F) {
-    // llvm::DenseMap<std::string, LoadInst *> map;
-    // we probably dont have any problems with this
-    // because we check both in and out of the basic block
+  void eliminateRedLoads(Function *F) {
+    // we are looking to eliminate redundant loads
+    // and example would be
+    //%9 = load i32, ptr %2, align 4
+    //%10 = load i32, ptr %2, align 4
+    // here since there is no store happening in between
+    // the two instructions , the second value %10 can be replaced
+    // with %9, this will help us identify commonn sub expressions in the future
+    //  and also eliminate unwanted loads
+    errs() << "................................................................"
+              "..................\n";
+    errs() << "Running Redundant Load Elimination on : " << F->getName()
+           << "\n";
     for (auto BB = F->begin(), eBB = F->end(); BB != eBB; BB++) {
+      std::unordered_map<Value *, Value *> map;
       for (auto inst = BB->begin(), einst = BB->end(); inst != einst;) {
         bool del = false;
         if (auto op = dyn_cast<LoadInst>(inst)) {
-          if (!op->isUsedInBasicBlock(&*BB) &&
-              !op->isUsedOutsideOfBlock(&*BB)) {
+          auto item = map.find(op->getPointerOperand());
+          if (item != map.end()) {
             del = true;
+            errs() << "Replaced : " << *inst << "| with : " << *item->second
+                   << "\n";
+            op->replaceAllUsesWith(item->second);
+          } else {
+            map[op->getPointerOperand()] = op;
+          }
+        } else if (auto op = dyn_cast<StoreInst>(inst)) {
+          auto item = map.find(op->getPointerOperand());
+          if (item != map.end()) {
+            map.erase(item);
           }
         }
         if (del) {
@@ -95,49 +76,22 @@ struct LVN : PassInfoMixin<LVN> {
       }
     }
   }
-  // TO DO : eliminate redundant stores , like when two variables are the same
-  // thing , this must be implemented only after common
-  //  sub expression elimination
-  void eliminateDeadStores(Function *F) {
-    // we may have problems with this if the load inst is used in the next basic
-    // block ???
-    // i should find that out
-    // this breaks when there is load happening outside the basic block ,
-    // the store is still valid but there is deletion happening
-    std::unordered_map<Value *, Instruction *> map;
-    for (auto BB = F->begin(), eBB = F->end(); BB != eBB; BB++) {
-      // std::unordered_map<Value *, Instruction *> map;
-      for (auto inst = BB->begin(), einst = BB->end(); inst != einst; inst++) {
-        if (auto op = dyn_cast<StoreInst>(inst)) {
-          // errs() << op->getPointerOperand() << "  " << *inst << "  "
-          //       << op->getOperand(1)->getNameOrAsOperand() << "\n";
-          map.insert({op->getOperand(1), &*inst});
-        }
-        if (auto op = dyn_cast<LoadInst>(inst)) {
-          // errs() << op->getOperand(0)->getNameOrAsOperand() << "  " << *inst
-          //       << "\n";
-          map.erase(op->getOperand(0));
-        }
-        // bool del = false;
-      }
-    }
-    for (auto deadstore = map.begin(), e = map.end(); deadstore != e;) {
-      auto next = std::next(deadstore);
-      // errs() << "we replaced lol \n";
-      deadstore->second->eraseFromParent();
-      deadstore = next;
-    }
-  }
   void eliminateDeadAllocs(Function *F) {
-    // same as  store , we are only checking if its used inside the basic block
-    //  we may end up with errors if the alloc is happening outside and the
-    //  store inside the basic block
+    // a simple metho to check if the alloca instruction is used anywhere in the
+    // function
+    // if it is unused, we delete it , this is required after Common Sub
+    // Expression Elimination
+    // and constant propogation since there maybe dead alloca , test it without
+    // this function to play with it
+    errs() << "................................................................"
+              "..................\n";
+    errs() << "Running Dead Alloc Elimination on Function : " << F->getName()
+           << "\n";
     std::unordered_map<std::string, Instruction *> map;
     for (auto BB = F->begin(), eBB = F->end(); BB != eBB; BB++) {
-      // std::unordered_map<std::string, Instruction *> map;
       for (auto inst = BB->begin(), einst = BB->end(); inst != einst; inst++) {
         if (auto op = dyn_cast<AllocaInst>(inst)) {
-          errs() << "  " << *inst << "  " << op->getName() << "\n";
+          // errs() << "  " << *inst << "  " << op->getName() << "\n";
           std::string a = op->getNameOrAsOperand();
           map.insert({a, &*inst});
         }
@@ -147,83 +101,74 @@ struct LVN : PassInfoMixin<LVN> {
       }
     }
     for (auto deadstore = map.begin(), e = map.end(); deadstore != e;) {
+      errs() << "Erased Dead Alloc : " << *deadstore->second << "\n";
       auto next = std::next(deadstore);
       deadstore->second->eraseFromParent();
       deadstore = next;
     }
   }
 
-  void constantPropogation(BasicBlock *BB) {
-    std::unordered_map<std::basic_string<char>, int> constantmap;
-    for (auto inst = BB->begin(), eInst = BB->end(); inst != eInst;) {
-      // eliminateRedLoads(&*inst);
-      bool del = false;
-      if (auto op = dyn_cast<BinaryOperator>(inst)) {
-        int l = getValue(op->getOperand(0), constantmap);
-        int r = getValue(op->getOperand(1), constantmap);
-        if (l != 0 && r != 0) {
-          int result = 0;
-          if (op->getOpcode() == Instruction::Add) {
-            result = l + r;
-          } else if (op->getOpcode() == Instruction::Sub) {
-            result = l - r;
-          } else if (op->getOpcode() == Instruction::Mul) {
-            result = l * r;
-          } else if (op->getOpcode() == Instruction::SDiv) {
-            result = l / r;
-          } else if (op->getOpcode() == Instruction::SRem) {
-            result = l % r;
-          }
-          auto value = ConstantInt::get(op->getType(), result);
-          op->replaceAllUsesWith(value);
-          del = true;
-        }
-      } else if (auto op = dyn_cast<StoreInst>(inst)) {
-        if (auto val = dyn_cast<ConstantInt>(op->getOperand(0))) {
-          constantmap.insert(
-              {op->getOperand(1)->getNameOrAsOperand(), val->getSExtValue()});
-          op->replaceAllUsesWith(
-              ConstantInt::get(op->getType(), val->getSExtValue()));
-          del = true;
-        }
-      } else if (auto op = dyn_cast<LoadInst>(inst)) {
-        auto item = constantmap.find(op->getOperand(0)->getNameOrAsOperand());
-        if (item != constantmap.end()) {
-          // constantmap.insert({op->getNameOrAsOperand(), item->second});
-          op->replaceAllUsesWith(ConstantInt::get(op->getType(), item->second));
-          del = true;
-        }
-      }
-      if (del) {
-        auto next = std::next(inst);
-        inst->eraseFromParent();
-        inst = next;
-      } else {
-        inst++;
-      }
-    }
-  }
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &) {
-    for (auto BB = F.begin(), eBB = F.end(); BB != eBB; BB++) {
-      eliminateRedLoads(&*BB);
-      constantPropogation(&*BB);
-      llvm::DenseMap<std::tuple<unsigned, Value *, Value *>, Value *> map;
-      bool del = false;
+  void constantPropogation(Function *F) {
+    // here constant map stores if the value is constant
+    // it stores the ssa value example %3 and the integer value for it
+    errs() << "................................................................"
+              "..................\n";
+
+    errs() << "Constant propogation / folding on Function : " << F->getName()
+           << "\n";
+    for (auto BB = F->begin(), eBB = F->end(); BB != eBB; BB++) {
+      std::unordered_map<std::basic_string<char>, int> constantmap;
       for (auto inst = BB->begin(), eInst = BB->end(); inst != eInst;) {
         bool del = false;
         if (auto op = dyn_cast<BinaryOperator>(inst)) {
-          auto hashl = op->getOperand(0);
-          auto hashr = op->getOperand(1);
-          if (hashl > hashr && (op->getOpcode() == Instruction::Add ||
-                                op->getOpcode() == Instruction::Mul)) {
-            std::swap(hashl, hashr);
-          }
-          auto expr = map.find(std::make_tuple(op->getOpcode(), hashl, hashr));
-          if (expr != map.end()) {
-            op->replaceAllUsesWith(expr->second);
+          auto l = getValue(op->getOperand(0),
+                            constantmap); // we see if its a constant or its
+                                          // inside the constant map
+          auto r = getValue(op->getOperand(1), constantmap);
+          if (l && r) {
+            int result = 0;
+            if (op->getOpcode() == Instruction::Add) {
+              result = *l + *r;
+            } else if (op->getOpcode() == Instruction::Sub) {
+              result = *l - *r;
+            } else if (op->getOpcode() == Instruction::Mul) {
+              result = *l * *r;
+            } else if (op->getOpcode() == Instruction::SDiv) {
+              result = *l / *r;
+            } else if (op->getOpcode() == Instruction::SRem) {
+              result = *l % *r;
+            }
+            // if both are constants then they can be folded
+            auto value = ConstantInt::get(op->getType(), result);
+            errs() << "constants folded : left :" << l << "  right :" << r
+                   << "\n";
+            op->replaceAllUsesWith(value);
             del = true;
-          } else {
-            map[std::make_tuple(op->getOpcode(), hashl, hashr)] = &*inst;
+          }
+        } else if (auto op = dyn_cast<StoreInst>(inst)) {
+          if (auto val = dyn_cast<ConstantInt>(op->getOperand(0))) {
+            constantmap.insert(
+                {op->getOperand(1)->getNameOrAsOperand(), val->getSExtValue()});
+            // errs() << "Erased Dead Store : " << *inst
+            //      << " Replaced with Constant : " << val->getSExtValue()
+            //    << "\n";
+            // op->replaceAllUsesWith(ConstantInt::get(
+            // op->getType(),
+            // val->getSExtValue())); // we eliminate redundant stores by
+            //  replacing all the values in the
+            //  upcoming blocks
+            // del = true;
+          }
+        } else if (auto op = dyn_cast<LoadInst>(inst)) {
+          auto item = constantmap.find(op->getOperand(0)->getNameOrAsOperand());
+          if (item != constantmap.end()) {
+            errs() << "Replaced Dead Load : " << *inst
+                   << "| with constant : " << item->second << "\n";
+            op->replaceAllUsesWith(
+                ConstantInt::get(op->getType(), item->second));
+            // constant loads are eliminated and replaced with the values
+            // instead
+            del = true;
           }
         }
         if (del) {
@@ -235,8 +180,53 @@ struct LVN : PassInfoMixin<LVN> {
         }
       }
     }
-    // eliminateDeadLoads(&F);
-    // eliminateDeadStores(&F);
+  }
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &) {
+    eliminateRedLoads(&F);
+    constantPropogation(&F);
+    errs() << "................................................................"
+              "..................\n";
+    errs() << "Common SubExpression Elimination : " << F.getName() << "\n";
+    for (auto BB = F.begin(), eBB = F.end(); BB != eBB; BB++) {
+      // eliminateRedLoads();   // we eliminate redundant loads since its a
+      //  pre-requisite for CSE
+      // constantPropogation(&F); // we eliminate constants from each basic
+      //  blocks
+      llvm::DenseMap<std::tuple<unsigned, Value *, Value *>, Value *> map;
+      // this is out LVN map where we store the expressions as tuples
+      bool del = false;
+      for (auto inst = BB->begin(), eInst = BB->end(); inst != eInst;) {
+        bool del = false;
+        if (auto op = dyn_cast<BinaryOperator>(inst)) {
+          auto hashl = op->getOperand(0);
+          auto hashr = op->getOperand(1);
+          if (hashl > hashr && (op->getOpcode() == Instruction::Add ||
+                                op->getOpcode() == Instruction::Mul)) {
+            std::swap(hashl,
+                      hashr); // this is to maintain commutativity , so a+b and
+                              // b+a are always stored in the same order
+          }
+          auto expr = map.find(std::make_tuple(op->getOpcode(), hashl, hashr));
+          if (expr != map.end()) {
+            errs() << "Common SubExpr Found : " << *inst
+                   << " replaced with : " << *expr->second << "\n";
+            op->replaceAllUsesWith(
+                expr->second); // if its an old expression then replace it
+            del = true;
+          } else {
+            map[std::make_tuple(op->getOpcode(), hashl, hashr)] =
+                &*inst; // if its a new tuple store it
+          }
+        }
+        if (del) {
+          auto next = std::next(inst);
+          inst->eraseFromParent();
+          inst = next;
+        } else {
+          inst++;
+        }
+      }
+    }
     eliminateDeadAllocs(&F);
     return PreservedAnalyses::all();
   }
@@ -249,7 +239,7 @@ PassPluginLibraryInfo getLVNPluginInfo() {
             PB.registerPipelineParsingCallback(
                 [](StringRef Name, FunctionPassManager &FPM,
                    ArrayRef<PassBuilder::PipelineElement>) {
-                  if (Name == "hello-world") {
+                  if (Name == "lvn") {
                     FPM.addPass(LVN());
                     return true;
                   }

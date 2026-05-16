@@ -1,5 +1,4 @@
-#
-nclude "string.h"
+#include "string.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Plugins/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
@@ -7,7 +6,7 @@ nclude "string.h"
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/InstrTypes.h>
 #include <string>
-    using namespace llvm;
+using namespace llvm;
 namespace {
 struct LVN : PassInfoMixin<LVN> {
   std::string getInfo(Value *inst) {
@@ -47,6 +46,7 @@ struct LVN : PassInfoMixin<LVN> {
             errs() << "Replaced........\n\n";
             inst->replaceAllUsesWith(expr->second);
             inst->eraseFromParent();
+
           } else {
             errs() << hash << "   new one vro\n";
             map[hash] = &*inst;
