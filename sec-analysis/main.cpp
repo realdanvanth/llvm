@@ -79,8 +79,10 @@ void detectUseAfterFree(BasicBlock *BB) {
     }
     if (auto load = dyn_cast<LoadInst>(inst)) {
       auto cond = objects.find(load->getPointerOperand());
-      // errs()<<"this load is not a pointer :
-      // "<<load->getOperand(0)->getNameOrAsOperand()<<"\n";
+      // this is for loading an object , loading a pointer
+      //  like *p = q; and q is a pointer
+      //  errs()<<"this load is not a pointer :
+      //  "<<load->getOperand(0)->getNameOrAsOperand()<<"\n";
       if (cond != objects.end()) { // if a pointer object is loaded
                                    // errs()<<"inserted load pointing to :
         // "<<load->getOperand(0)->getNameOrAsOperand()<<"\n";

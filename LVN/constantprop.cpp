@@ -1,3 +1,45 @@
+//========================================================================
+// FILE:
+//    LVN.cpp
+//
+// DESCRIPTION:
+//    This pass implements a simple Local Value Numbering (LVN) optimization
+//    pass for LLVM IR. The optimization is performed independently within
+//    each basic block.
+//
+//    The pass performs the following optimizations:
+//
+//      1. Redundant Load Elimination
+//         Repeated loads from the same memory location are eliminated when
+//         no intervening store modifies the value.
+//
+//      2. Constant Propagation and Constant Folding
+//         Constant values are tracked locally within a basic block. Binary
+//         operations whose operands are known constants are folded into a
+//         single constant value at compile time.
+//
+//      3. Common Subexpression Elimination (CSE)
+//         Previously computed expressions are detected using value numbering.
+//         Repeated computations are replaced with the already computed value.
+//
+//      4. Dead Alloca Elimination
+//         Unused stack allocations introduced during earlier transformations
+//         are removed from the function.
+//
+//    The pass uses a hash-based value numbering scheme where expressions are
+//    represented as tuples consisting of:
+//
+//        (Opcode, Left Operand, Right Operand)
+//
+//    Commutative operations such as addition and multiplication are normalized
+//    so that equivalent expressions produce identical value numbers.
+//
+// USAGE:
+//      $ opt -load-pass-plugin <BUILD_DIR>/lib/libLVN.so \
+//        -passes="lvn" <bitcode-file>
+//
+// License: MIT
+//========================================================================
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Plugins/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
@@ -9,17 +51,19 @@
 #include <llvm/IR/InstrTypes.h>
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/PassManager.h>
 #include <llvm/Support/Casting.h>
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <vector>
 #define DEBUG_TYPE "lvn"
 using namespace llvm;
 namespace {
 struct LVN : PassInfoMixin<LVN> {
-  std::optional<int>
+  std::optional<long>
   getValue(Value *operand,
-           std::unordered_map<std::basic_string<char>, int> constantmap) {
+           std::unordered_map<std::basic_string<char>, long> constantmap) {
     // this is a simple method , given a value , it checks if its a constant
     //  ie if the operands are constants or either if they were folded earlier
     //  and now have a constant entry
@@ -107,7 +151,7 @@ struct LVN : PassInfoMixin<LVN> {
       deadstore = next;
     }
   }
-
+  void eliminateDeadStrores(Function *F) {}
   void constantPropogation(Function *F) {
     // here constant map stores if the value is constant
     // it stores the ssa value example %3 and the integer value for it
@@ -117,7 +161,7 @@ struct LVN : PassInfoMixin<LVN> {
     errs() << "Constant propogation / folding on Function : " << F->getName()
            << "\n";
     for (auto BB = F->begin(), eBB = F->end(); BB != eBB; BB++) {
-      std::unordered_map<std::basic_string<char>, int> constantmap;
+      std::unordered_map<std::basic_string<char>, long> constantmap;
       for (auto inst = BB->begin(), eInst = BB->end(); inst != eInst;) {
         bool del = false;
         if (auto op = dyn_cast<BinaryOperator>(inst)) {
@@ -126,7 +170,7 @@ struct LVN : PassInfoMixin<LVN> {
                                           // inside the constant map
           auto r = getValue(op->getOperand(1), constantmap);
           if (l && r) {
-            int result = 0;
+            long result = 0;
             if (op->getOpcode() == Instruction::Add) {
               result = *l + *r;
             } else if (op->getOpcode() == Instruction::Sub) {
@@ -134,9 +178,15 @@ struct LVN : PassInfoMixin<LVN> {
             } else if (op->getOpcode() == Instruction::Mul) {
               result = *l * *r;
             } else if (op->getOpcode() == Instruction::SDiv) {
-              result = *l / *r;
+              if (*r != 0)
+                result = *l / *r;
+              else
+                errs() << "warning division by 0\n";
             } else if (op->getOpcode() == Instruction::SRem) {
-              result = *l % *r;
+              if (*r != 0)
+                result = *l % *r;
+              else
+                errs() << "warning division by 0\n";
             }
             // if both are constants then they can be folded
             auto value = ConstantInt::get(op->getType(), result);
@@ -149,15 +199,6 @@ struct LVN : PassInfoMixin<LVN> {
           if (auto val = dyn_cast<ConstantInt>(op->getOperand(0))) {
             constantmap.insert(
                 {op->getOperand(1)->getNameOrAsOperand(), val->getSExtValue()});
-            // errs() << "Erased Dead Store : " << *inst
-            //      << " Replaced with Constant : " << val->getSExtValue()
-            //    << "\n";
-            // op->replaceAllUsesWith(ConstantInt::get(
-            // op->getType(),
-            // val->getSExtValue())); // we eliminate redundant stores by
-            //  replacing all the values in the
-            //  upcoming blocks
-            // del = true;
           }
         } else if (auto op = dyn_cast<LoadInst>(inst)) {
           auto item = constantmap.find(op->getOperand(0)->getNameOrAsOperand());
@@ -181,17 +222,13 @@ struct LVN : PassInfoMixin<LVN> {
       }
     }
   }
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &) {
+  void CommonSubExprExpressionElimination(Function &F) {
     eliminateRedLoads(&F);
     constantPropogation(&F);
     errs() << "................................................................"
               "..................\n";
     errs() << "Common SubExpression Elimination : " << F.getName() << "\n";
     for (auto BB = F.begin(), eBB = F.end(); BB != eBB; BB++) {
-      // eliminateRedLoads();   // we eliminate redundant loads since its a
-      //  pre-requisite for CSE
-      // constantPropogation(&F); // we eliminate constants from each basic
-      //  blocks
       llvm::DenseMap<std::tuple<unsigned, Value *, Value *>, Value *> map;
       // this is out LVN map where we store the expressions as tuples
       bool del = false;
@@ -228,32 +265,95 @@ struct LVN : PassInfoMixin<LVN> {
       }
     }
     eliminateDeadAllocs(&F);
-    return PreservedAnalyses::all();
+  }
+  std::vector<Value *> scanLoads(Function &F) {
+    std::vector<Value *> loadedstores;
+    for (auto BB = F.begin(), eBB = F.end(); BB != eBB; BB++) {
+      for (auto inst = BB->begin(), einst = BB->end(); inst != einst; inst++) {
+        if (auto load = dyn_cast<LoadInst>(inst)) {
+          loadedstores.push_back(load->getOperand(0));
+          errs() << "load : " << *inst << "\n";
+        }
+      }
+    }
+    return loadedstores;
+  }
+  // return loadedstores;
+  llvm::PreservedAnalyses run(llvm::Module &M, llvm::ModuleAnalysisManager &) {
+    std::vector<Value *> stores;
+    for (auto FB = M.begin(), eF = M.end(); FB != eF; FB++) {
+      CommonSubExprExpressionElimination(*FB);
+      auto fs = scanLoads(*FB);
+      stores.insert(stores.end(), fs.begin(), fs.end());
+    }
+    for (int i = 0; i != stores.size(); i++) {
+      errs() << stores[i]->getNameOrAsOperand() << "\n";
+    }
+    for (auto FB = M.begin(), eF = M.end(); FB != eF; FB++) {
+      for (auto BB = FB->begin(), eBB = FB->end(); BB != eBB; BB++) {
+        // auto del = false;
+        for (auto inst = BB->begin(), einst = BB->end(); inst != einst;) {
+          auto del = false;
+          if (auto store = dyn_cast<StoreInst>(inst)) {
+            auto c = std::count(stores.begin(), stores.end(),
+                                store->getPointerOperand());
+            errs() << c << "\n";
+            if (c <= 0) {
+              errs() << "deleting" << *inst << "\n";
+              del = true;
+            } else {
+              errs() << "not dead\n";
+            }
+          }
+          if (del == true) {
+            auto next = std::next(inst);
+            inst->eraseFromParent();
+            inst = next;
+          } else {
+            inst++;
+          }
+        }
+      }
+    }
+    for (auto FB = M.begin(), eF = M.end(); FB != eF; FB++) {
+      for (auto BB = FB->begin(), eBB = FB->end(); BB != eBB; BB++) {
+        for (auto inst = BB->begin(), einst = BB->end(); inst != einst;) {
+          auto del = false;
+          if (auto alloca = dyn_cast<AllocaInst>(inst)) {
+            if (alloca->use_empty()) {
+              del = true;
+            }
+          }
+          if (del) {
+            auto next = std::next(inst);
+            inst->eraseFromParent();
+            inst = next;
+          } else {
+            inst++;
+          }
+        }
+      }
+    }
+    return PreservedAnalyses::none();
   }
 };
 } // namespace
 // namespace
-PassPluginLibraryInfo getLVNPluginInfo() {
-  return {LLVM_PLUGIN_API_VERSION, "LVN", LLVM_VERSION_STRING,
-          [](PassBuilder &PB) {
+llvm::PassPluginLibraryInfo getLVNInfo() {
+  return {LLVM_PLUGIN_API_VERSION, "DeadStoreElim", LLVM_VERSION_STRING,
+          [](llvm::PassBuilder &PB) {
             PB.registerPipelineParsingCallback(
-                [](StringRef Name, FunctionPassManager &FPM,
-                   ArrayRef<PassBuilder::PipelineElement>) {
+                [](llvm::StringRef Name, llvm::ModulePassManager &MPM,
+                   llvm::ArrayRef<llvm::PassBuilder::PipelineElement>) {
                   if (Name == "lvn") {
-                    FPM.addPass(LVN());
+                    MPM.addPass(LVN());
                     return true;
                   }
                   return false;
                 });
-            PB.registerPipelineStartEPCallback([](ModulePassManager &MPM,
-                                                  OptimizationLevel Level) {
-              FunctionPassManager FPM;
-              FPM.addPass(LVN());
-              MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
-            });
           }};
 }
-extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo
+extern "C" LLVM_ATTRIBUTE_WEAK llvm::PassPluginLibraryInfo
 llvmGetPassPluginInfo() {
-  return getLVNPluginInfo();
+  return getLVNInfo();
 }

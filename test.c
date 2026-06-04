@@ -1,31 +1,25 @@
-#include <stdlib.h>
-void test() {
-  // 1. normal alloc and free - no error
-  int *p = malloc(4);
-  free(p);
+#include <stdio.h>
 
-  // 2. double free
-  int *q = malloc(4);
-  free(q);
-  free(q); // ERROR: double free
+int test(int a, int b, int c, int n) {
+  int sum = 0;
 
-  // 3. use after free - load
-  int *r = malloc(4);
-  free(r);
-  int x = *r; // ERROR: load after free
+  for (int i = 0; i < n; i++) {
+    int x1 = a + b;
+    int x2 = a + b;
 
-  // 4. use after free - store
-  int *s = malloc(4);
-  free(s);
-  *s = 5; // ERROR: store after free
+    int x3 = (a + b) * c;
+    int x4 = x1 * c;
 
-  // 5. use after free - GEP (array indexing)
-  int *arr = malloc(16);
-  free(arr);
-  int y = arr[2]; // ERROR: gep after free
+    int x5 = x3 + x4;
+    int x6 = x3 + x4;
 
-  // 6. memory leak - no free at all
-  int *leak = malloc(4);
-  // ERROR: never freed
+    int x7 = (c + 10) * (c + 10);
+    int x8 = (c + 10) * (c + 10);
+
+    sum += x1 + x2 + x5 + x6 + x7 + x8;
+  }
+
+  return sum;
 }
-int main() { test(); }
+
+int main() { printf("%d\n", test(3, 4, 5, 100)); }

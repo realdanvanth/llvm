@@ -55,8 +55,9 @@ struct DeadCode : public PassInfoMixin<DeadCode> {
       }
     }
   }
-  // so now we will be eliminating dead loads, loads that are not used anywhere this ,ust come after everything is done
-   void eliminateDeadLoads(Function *F) {
+  // so now we will be eliminating dead loads, loads that are not used anywhere
+  // this ,ust come after everything is done
+  void eliminateDeadLoads(Function *F) {
     // llvm::DenseMap<std::string, LoadInst *> map;
     for (auto BB = F->begin(), eBB = F->end(); BB != eBB; BB++) {
       for (auto inst = BB->begin(), einst = BB->end(); inst != einst;) {
@@ -81,7 +82,6 @@ struct DeadCode : public PassInfoMixin<DeadCode> {
       }
     }
   }
-
 
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &) {
     Function *F = M.getFunction("main");
