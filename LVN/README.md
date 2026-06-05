@@ -220,6 +220,7 @@ so we can eliminate a+b and b+a since they are identical
 </td>
 </tr>
 </table>
+
 ```cpp
 if (hashl > hashr && (op->getOpcode() == Instruction::Add ||
                                 op->getOpcode() == Instruction::Mul)) {
