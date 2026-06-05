@@ -71,8 +71,11 @@ define dso_local i32 @compute(i32 noundef %0, i32 noundef %1) #0 {
 </table>
 
 
-## Dead Load Elimination:
-
+## Redundant Load Elimination:
+this is a pre-requisite for CSE as we need to identify the common expressions
+two loads loading the same pointer are identical if there is no store happening 
+in between. all identical loads can be replaced with its copy.
+This also makes the program effcient.
 <table>
 <tr>
 <th width="50%">Before Pass</th>
@@ -83,10 +86,8 @@ define dso_local i32 @compute(i32 noundef %0, i32 noundef %1) #0 {
 <td valign="top">
 
 <pre style="font-size:11px;"><code>
-```llvm
   %5 = load i32, ptr %3, align 4
   %6 = load i32, ptr %3, align 4
-```
 </code></pre>
 
 </td>
@@ -94,9 +95,43 @@ define dso_local i32 @compute(i32 noundef %0, i32 noundef %1) #0 {
 <td valign="top">
 
 <pre style="font-size:11px;"><code>
-```llvm
   %5 = load i32, ptr %3, align 4
-```
+</code></pre>
+</td>
+</tr>
+</table>
+
+## Constant Propogation / Constant Folding
+If a store is storing constants , all the loads that load the same SSA value
+can be replaced with constants. so 
+instead of add nsw 132 %5, %6 we get add nsw i32, 10,20
+If a binary operator has the left and the right value as constants then we can 
+fold it.
+<table>
+<tr>
+<th width="50%">Before Pass</th>
+<th width="50%">After Pass</th>
+</tr>
+
+<tr>
+<td valign="top">
+
+<pre style="font-size:11px;"><code>
+  store i32 10, ptr %2, align 4
+  store i32 20, ptr %3, align 4
+  %5 = load i32, ptr %2, align 4
+  %6 = load i32, ptr %3, align 4
+  %7 = add nsw i32 %5, %6
+</code></pre>
+
+</td>
+
+<td valign="top">
+
+<pre style="font-size:11px;"><code>
+ store i32 10, ptr %2, align 4
+ store i32 20, ptr %3, align 4
+ %5 = load i32, 30, align 4
 </code></pre>
 </td>
 </tr>
