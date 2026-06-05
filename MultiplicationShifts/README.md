@@ -32,3 +32,20 @@ a * 16 →  a << 4
 </td>
 </tr>
 </table>
+
+### code:
+```cpp
+if (auto *C = dyn_cast<ConstantInt>(Mul->getOperand(1))) {
+              if (C->getValue().isPowerOf2()) {
+                // If true, replace multiplication with left shift
+                IRBuilder<> Builder(Mul);
+                Value *ShiftAmount =
+                    Builder.getInt32(C->getValue().exactLogBase2());
+                Value *NewMul =
+                    Builder.CreateShl(Mul->getOperand(0), ShiftAmount);
+                Mul->replaceAllUsesWith(NewMul);
+                Mul->eraseFromParent(); // Remove the multiplication instruction
+                Modified = true;
+              }
+            }
+```
