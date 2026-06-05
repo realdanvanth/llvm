@@ -136,3 +136,35 @@ fold it.
 </td>
 </tr>
 </table>
+
+## Common SubExpr Elimination
+If we find the same binary operation happening more than once 
+we replace duplicate binary operations by storing the 
+binary operation in a hashmap with op,l,r
+and if its a commutative operation we sort it and store it, 
+so we can eliminate a+b and b+a since they are identical 
+
+<table>
+<tr>
+<th width="50%">Before Pass</th>
+<th width="50%">After Pass</th>
+</tr>
+
+<tr>
+<td valign="top">
+
+<pre style="font-size:11px;"><code>
+  %10 = add nsw i32 %8, %9
+  %11 = add nsw i32 %8, %9
+</code></pre>
+
+</td>
+
+<td valign="top">
+
+<pre style="font-size:11px;"><code>
+ %10 = add nsw i32 %8, %9
+</code></pre>
+</td>
+</tr>
+</table>
