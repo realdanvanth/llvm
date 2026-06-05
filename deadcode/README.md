@@ -48,3 +48,32 @@ int main() {
 </td>
 </tr>
 </table>
+
+### code:
+```cpp
+void callgraph(
+      Function *func,
+      vector<StringRef> functions, // this must be called first before anything
+      string indentation) {
+    functions.push_back(func->getName());
+    for (auto BB = func->begin(), eBB = func->end(); BB != eBB; BB++) {
+      for (auto Inst = BB->begin(), eInst = BB->end(); Inst != eInst; Inst++) {
+        if (auto call = dyn_cast<CallInst>(Inst)) {
+          auto calledf = call->getCalledFunction();
+          // errs()<<calledf->getName()<<"\n";
+          if (check(functions, calledf->getName())) {
+            errs() << indentation << func->getName() << "-->"
+                   << calledf->getName() << "\n";
+            vector<StringRef> cycle = functions;
+            cycle.push_back(calledf->getName());
+            addlivecode(calledf->getName());
+            callgraph(calledf, cycle, indentation + "   ");
+          } else {
+            errs() << "\n";
+          }
+        }
+      }
+    }
+  }
+
+```
