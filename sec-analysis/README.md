@@ -38,12 +38,16 @@ free(p);
 free(p);   // Double Free
 ```
 
-Output:
-
-```text
-DOUBLE FREE detected
+### code:
+```cpp
+auto elem = ptrset.find(call->getOperand(0));
+        if (elem != ptrset.end()) {
+          auto obj = objects.find(elem->second);
+          if (obj == objects.end()) {
+            errs() << "DOUBLE FREE double free detected\n";
+          }
+}
 ```
-
 ---
 
 ### Use After Free
@@ -58,10 +62,15 @@ free(p);
 p[0] = 10; // Use After Free
 ```
 
-Output:
-
-```text
-USE AFTER FREE detected
+### code:
+```cpp
+if (auto getelem = dyn_cast<GetElementPtrInst>(inst)) {
+      // errs()<<getelem->getOperand(0)->getNameOrAsOperand()<<"\n";
+      auto elem = objects.find(getelem->getOperand(0));
+      if (elem == objects.end()) {
+        errs() << "USE AFTER FREE after free detected\n";
+      }
+    }
 ```
 
 ---
@@ -78,10 +87,21 @@ free(p);
 int x = *p; // Load After Free
 ```
 
-Output:
-
-```text
-LOAD AFTER FREE detected
+### code:
+```cpp
+if (auto load = dyn_cast<LoadInst>(inst)) {
+      auto cond = objects.find(load->getPointerOperand()); 
+      if (cond != objects.end()) { 
+        ptrset.insert({load, load->getOperand(0)});
+      }
+      auto ptr = ptrset.find(load->getPointerOperand());
+      if (ptr != ptrset.end()) {
+        auto obj = objects.find(ptr->second);
+        if (obj == objects.end()) {
+          errs() << "LOAD AFTER FREE detected\n";
+        }
+      }
+  } 
 ```
 
 ---
@@ -98,10 +118,18 @@ free(p);
 *p = 42; // Store After Free
 ```
 
-Output:
+### code:
+```cpp
+else if (auto store = dyn_cast<StoreInst>(inst)) {
+      auto ptr = ptrset.find(store->getPointerOperand());
+      if (ptr != ptrset.end()) {
+        auto obj = objects.find(ptr->second);
+        if (obj == objects.end()) {
+          errs() << "STORE AFTER FREE detected\n";
+        }
+      }
+    }
 
-```text
-STORE AFTER FREE detected
 ```
 
 ## Alias Analysis
