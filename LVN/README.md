@@ -168,3 +168,10 @@ so we can eliminate a+b and b+a since they are identical
 </td>
 </tr>
 </table>
+
+## Dead Store/Alloca Elimination
+If a store is not loaded throughout the program then we eliminate the store
+We iterate through all instructions and and store all the loaded SSA values 
+in an array and if a store uses an unused location it is eliminated,
+the same goes for alloca
+
