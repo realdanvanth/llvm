@@ -101,6 +101,28 @@ This also makes the program effcient.
 </tr>
 </table>
 
+### code :
+```cpp
+std::unordered_map<Value *, Value *> map;
+      for (auto inst = BB->begin(), einst = BB->end(); inst != einst;) {
+        bool del = false;
+        if (auto op = dyn_cast<LoadInst>(inst)) {
+          auto item = map.find(op->getPointerOperand());
+          if (item != map.end()) {
+            del = true;
+            errs() << "Replaced : " << *inst << "| with : " << *item->second
+                   << "\n";
+            op->replaceAllUsesWith(item->second);
+          } else {
+            map[op->getPointerOperand()] = op;
+          }
+        } else if (auto op = dyn_cast<StoreInst>(inst)) {
+          auto item = map.find(op->getPointerOperand());
+          if (item != map.end()) {
+            map.erase(item);
+          }
+        }
+```
 ## Constant Propogation / Constant Folding
 If a store is storing constants , all the loads that load the same SSA value
 can be replaced with constants. so 
@@ -137,6 +159,36 @@ fold it.
 </tr>
 </table>
 
+### code:
+```cpp
+ if (l && r) {
+            long result = 0;
+            if (op->getOpcode() == Instruction::Add) {
+              result = *l + *r;
+            } else if (op->getOpcode() == Instruction::Sub) {
+              result = *l - *r;
+            } else if (op->getOpcode() == Instruction::Mul) {
+              result = *l * *r;
+            } else if (op->getOpcode() == Instruction::SDiv) {
+              if (*r != 0)
+                result = *l / *r;
+              else
+                errs() << "warning division by 0\n";
+            } else if (op->getOpcode() == Instruction::SRem) {
+              if (*r != 0)
+                result = *l % *r;
+              else
+                errs() << "warning division by 0\n";
+            }
+            // if both are constants then they can be folded
+            auto value = ConstantInt::get(op->getType(), result);
+            errs() << "constants folded : left :" << l << "  right :" << r
+                   << "\n";
+            op->replaceAllUsesWith(value);
+            del = true;
+          }
+
+```
 ## Common SubExpr Elimination
 If we find the same binary operation happening more than once 
 we replace duplicate binary operations by storing the 
@@ -168,10 +220,50 @@ so we can eliminate a+b and b+a since they are identical
 </td>
 </tr>
 </table>
+```cpp
+if (hashl > hashr && (op->getOpcode() == Instruction::Add ||
+                                op->getOpcode() == Instruction::Mul)) {
+            std::swap(hashl,
+                      hashr); // this is to maintain commutativity , so a+b and
+                              // b+a are always stored in the same order
+          }
+          auto expr = map.find(std::make_tuple(op->getOpcode(), hashl, hashr));
+          if (expr != map.end()) {
+            errs() << "Common SubExpr Found : " << *inst
+                   << " replaced with : " << *expr->second << "\n";
+            op->replaceAllUsesWith(
+                expr->second); // if its an old expression then replace it
+            del = true;
+          } else {
+            map[std::make_tuple(op->getOpcode(), hashl, hashr)] =
+                &*inst; // if its a new tuple store it
+          }
+```
 
 ## Dead Store/Alloca Elimination
+
 If a store is not loaded throughout the program then we eliminate the store
 We iterate through all instructions and and store all the loaded SSA values 
 in an array and if a store uses an unused location it is eliminated,
 the same goes for alloca
 
+```cpp
+if (auto store = dyn_cast<StoreInst>(inst)) {
+            auto c = std::count(stores.begin(), stores.end(),
+                                store->getPointerOperand());
+            if (c <= 0) {
+              errs() << "deleting store : " << *inst << "\n";
+              del = true;
+            }
+          }
+```
+
+```cpp
+if (auto alloca = dyn_cast<AllocaInst>(inst)) {
+            if (alloca->use_empty()) {
+              errs() << "deleting alloca : " << *inst << "\n";
+              del = true;
+            }
+          }
+
+```
