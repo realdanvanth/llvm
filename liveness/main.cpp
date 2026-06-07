@@ -4,24 +4,24 @@
 using namespace llvm;
 namespace {
 struct HelloWorld : PassInfoMixin<HelloWorld> {
-  void printSET(std::vector<Value *> SET) {
-    for (auto i = 0; i < SET.size(); i++) {
-      errs() << SET[i]->getNameOrAsOperand() << " ";
+  void printSET(std::set<Value *> SET) {
+    for (auto s : SET) {
+      errs() << s->getNameOrAsOperand() << " ";
     }
     errs() << "\n";
   }
   void GenKill(BasicBlock &BB) {
     errs() << "----------------------------------\n";
-    std::vector<Value *> KILL;
-    std::vector<Value *> GEN;
+    std::set<Value *> KILL;
+    std::set<Value *> GEN;
     for (auto inst = BB.begin(), einst = BB.end(); inst != einst; inst++) {
       if (auto load = dyn_cast<LoadInst>(inst)) {
         if (std::find(KILL.begin(), KILL.end(), load->getPointerOperand()) ==
             KILL.end()) {
-          GEN.push_back(load->getPointerOperand());
+          GEN.insert(load->getPointerOperand());
         }
       } else if (auto store = dyn_cast<StoreInst>(inst)) {
-        KILL.push_back(store->getPointerOperand());
+        KILL.insert(store->getPointerOperand());
       }
     }
     errs() << "GEN: \n";

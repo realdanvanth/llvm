@@ -6,7 +6,7 @@ int test(int a, int b, int c, int n) {
   for (int i = 0; i < n; i++) {
     int x1 = a + b;
     int x2 = a + b;
-
+    x1 = 2;
     int x3 = (a + b) * c;
     int x4 = x1 * c;
 
